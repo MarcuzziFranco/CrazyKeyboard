@@ -1,10 +1,12 @@
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 
 // Variable global para la layer
 int layer = 1;
 int intervalTimeDobleSpace = 200;
 DWORD lastSpacePressTime = 0;
+const char delimiter[] = "=";
 
 // Estructura para mapear teclas en capa 2 a sus códigos virtuales
 const struct
@@ -12,19 +14,19 @@ const struct
     int original;
     int remap;
 } remapDictionary[] = {
-    {0x41, VK_LEFT},   // A
-    {0x53, VK_DOWN},   // S
+    {0x41, VK_DOWN},   // A
+    {0x53, VK_LEFT},   // S
     {0x44, VK_UP},     // D
     {0x46, VK_RIGHT},  // F
     {0x4A, VK_HOME},   // J
     {0x4B, VK_END},    // K
     {0x4C, VK_RETURN}, // L
-    {0xBA, VK_BACK},   // Ñ (Acento grave - Tecla de consola en español)
-    {0x08, VK_BACK}    // Backspace
+    {0xBA, VK_BACK},
+    {0xC0, VK_BACK} // Ñ (Acento grave - Tecla de consola en español)
 };
 
 // Función para remapear la tecla según el diccionario
-int remapKey(char originalKey)
+int remapKey(int originalKey)
 {
     for (int i = 0; i < sizeof(remapDictionary) / sizeof(remapDictionary[0]); ++i)
     {
@@ -52,12 +54,14 @@ int changeCurrentLayer()
         {
             layer = 2;
             simulationKeyEvent(VK_BACK);
+            simulationKeyEvent(VK_BACK);
             printf("Cambiar a layer %d\n", layer);
             return 1;
         }
         else if (layer == 2)
         {
             layer = 1;
+            simulationKeyEvent(VK_BACK);
             simulationKeyEvent(VK_BACK);
             printf("Cambiar a layer %d\n", layer);
             return 1;
@@ -74,30 +78,20 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     {
         KBDLLHOOKSTRUCT *kbStruct = (KBDLLHOOKSTRUCT *)lParam;
 
-        if ((wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) && kbStruct->vkCode == VK_SPACE)
+        if ((wParam == WM_KEYUP || wParam == WM_SYSKEYUP) && kbStruct->vkCode == VK_SPACE)
         {
-            if (changeCurrentLayer() == 1)
+            if (changeCurrentLayer(wParam) == 1)
                 return 1;
         }
-        else if (layer == 2 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
+        else if (layer == 2 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) && remapKey(kbStruct->vkCode) != 0)
         {
-            printf("Tecla original: %d\n", kbStruct->vkCode);
             int remappedKeyCode = remapKey(kbStruct->vkCode);
-            printf("Tecla remapeada: %d\n", remappedKeyCode);
-            if (remappedKeyCode != 0)
-            {
-                // Simular el evento de la tecla remapeada
-                keybd_event(remappedKeyCode, 0, 0, 0);
-                keybd_event(remappedKeyCode, 0, KEYEVENTF_KEYUP, 0);
-                printf("Tecla remapeada: %d\n", remappedKeyCode);
-                // Aquí puedes realizar la acción correspondiente al evento remapeado
-                return 1;
-            }
-            // Simular el evento de la tecla 'B'
-            // keybd_event('B', 0, 0, 0);
-            // keybd_event('B', 0, KEYEVENTF_KEYUP, 0);
-            // Cancelar el evento original de la tecla 'K'
+            // Simular el evento de la tecla remapeada
+            keybd_event(remappedKeyCode, 0, 0, 0);
+            keybd_event(remappedKeyCode, 0, KEYEVENTF_KEYUP, 0);
+            return 1;
         }
+        int keycode = kbStruct->vkCode;
     }
     // Dejar que otros programas manejen el evento de teclado
     return CallNextHookEx(NULL, nCode, wParam, lParam);
@@ -105,6 +99,8 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 
 int main()
 {
+    printf("Run crazy keboard...\n");
+    readFileConfigurations();
     // Instalar el hook del teclado
     HHOOK keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
     // Loop para mantener el programa en ejecución
